@@ -10,13 +10,13 @@ pthread_cond_t notempty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t notfull = PTHREAD_COND_INITIALIZER;
 int buffer = 0;
 
-static void* consumer (void* arg);
-static void* producer (void* arg);
+void* consumer (void* arg);
+void* producer (void* arg);
 
 int main () {
 
     //struttura dati condivisa - buffer di una posizione 
-    int buffer = 0; // vuoto == 0 -- pieno == 1
+    //int buffer = 0; // vuoto == 0 -- pieno == 1
 
     //creo e lancio i thread
     pthread_t t1, t2;
@@ -25,18 +25,17 @@ int main () {
     pthread_create(&t1,NULL,&producer,NULL);
     pthread_create(&t2,NULL,&consumer,NULL);
     //sleep(20);
-    printf("dc");
     pthread_join(t1,(void*) &status1);
     pthread_join(t2,(void*) &status2);
 
-    printf ("Thread Produttore terminato con status %d\nThread consumatore terminato con status %d",status1,status2);
+    printf ("Thread Produttore terminato con status %d\nThread consumatore terminato con status %d\n",status1,status2);
 
     return 0;
 }
 
-static void* consumer (void* arg) {
+void* consumer (void* arg) {
     int n;
-    while (0) {
+    while (1) {
         pthread_mutex_lock(&mtx);
         while (buffer==0) {
             pthread_cond_wait(&notempty,&mtx);
@@ -45,16 +44,17 @@ static void* consumer (void* arg) {
         }
         n = buffer;
         buffer = 0;
-        pthread_cond_signal(&notfull);
-        pthread_mutex_unlock(&mtx);
         printf("Consumatore : %d\n",n);
         fflush(stdout);
+        pthread_cond_signal(&notfull);
+        pthread_mutex_unlock(&mtx);
+        if (n==N) break;
     }
     return (void*)0;
 }
 
-static void* producer (void* arg) {
-    for (int i=0;i<N;i++) {
+void* producer (void* arg) {
+    for (int i=1;i<=N;i++) {
         pthread_mutex_lock(&mtx);
         while (buffer>0) {
             pthread_cond_wait(&notfull,&mtx);
@@ -62,6 +62,8 @@ static void* producer (void* arg) {
             fflush(stdout);
         }
         buffer = i;
+        printf ("Produttore : %d\n",i);
+        fflush(stdout);
         pthread_cond_signal(&notempty);
         pthread_mutex_unlock(&mtx);
     }
