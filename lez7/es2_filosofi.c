@@ -11,7 +11,7 @@ int NF;
 pthread_mutex_t * mtx;
 
 void * filosofo (void * arg);
-void prendiForchette (int id);
+int prendiForchette (int id);
 void rilasciaForchette (int id);
 int destra (int i);
 int sinistra (int i);
@@ -78,7 +78,7 @@ void * filosofo (void * arg) {
         nanosleep(&t1,NULL);
 
         //PRENDI FORCHETTE
-        prendiForchette(id);
+        if (prendiForchette(id)==-1) continue;
 
         //MANGIA
         printf ("Filosofo %d : Mangia v%d...\n",id,i);
@@ -96,21 +96,38 @@ void * filosofo (void * arg) {
     return (void*)0;
 }
 
-void prendiForchette (int id) {
+int prendiForchette (int id) {
     //TODO : GESTISCI ERRORI
+    int err;
     if (id%2 == 0) {
 
         //PRENDI PRIMA A SINISTRA
-        pthread_mutex_lock(&mtx[sinistra(id)]);
+        if ((err = pthread_mutex_lock(&mtx[sinistra(id)])) != 0) {
+            errno = err;
+            perror ("PrendiForchette : Lock1");
+            return -1;
+        }
         //CERCA DI PRENDERE A DESTRA 
-        pthread_mutex_lock(&mtx[destra(id)]);
+        if ((err = pthread_mutex_lock(&mtx[destra(id)])) != 0) {
+            errno = err;
+            perror ("PrendiForchette : Lock2");
+            return -1;
+        }
 
     } else {
 
         //PRENDI PRIMA A DESTRA 
-        pthread_mutex_lock(&mtx[destra(id)]);
+        if ((err = pthread_mutex_lock(&mtx[destra(id)])) != 0) {
+            errno = err;
+            perror ("PrendiForchette : Lock1");
+            return -1;
+        }
         //CERCA DI PRENDERE A SINISTRA 
-        pthread_mutex_lock(&mtx[sinistra(id)]);
+        if ((err = pthread_mutex_lock(&mtx[sinistra(id)])) != 0) {
+            errno = err;
+            perror ("PrendiForchette : Lock2");
+            return -1;
+        }
 
     }
 
