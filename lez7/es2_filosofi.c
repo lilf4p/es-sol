@@ -5,17 +5,14 @@
 #include <time.h>
 #include <errno.h>
 
-//NUMERO FILOSOFI
+//NUMERO FILOSOFI/FORCHETTE
 int NF;
-//RISORSA CONDIVISA -- NUMERO DI FORCHETTE DISPONIBILI PER OGNI FILOSOFO
-int * forchette;
-//LOCK E VC
-pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+//ARRAY DI MUTEX -- UNA PER OGNI FORCHETTA 
+pthread_mutex_t * mtx;
 
 void * filosofo (void * arg);
-void prendiForchette (int i);
-void rilasciaForchette (int i);
+void prendiForchette (int id);
+void rilasciaForchette (int id);
 int destra (int i);
 int sinistra (int i);
 
@@ -31,25 +28,26 @@ int main (int argc, char * argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    //TODO : CHIEDI BUG
-    //INIZIALIZZO ARRAY VAR CONDIZIONE -- UNA CODA PER OGNI FILOSOFO
-    //SVEGLIO SOLO CHI HA LA CONDIZIONE VERIFICATA -- CON UNA SOLA CODA (V.C) SVEGLIEREI TUTTI
     int err;
     int i;
-    //INIZIALMENTE TUTTI I FILOSOFI HANNO DUE FORCHETTE DISPONIBILI 
-    forchette = malloc (NF*sizeof(int));
+
+    mtx = malloc (NF*sizeof(pthread_mutex_t));
+    //INIZIALIZZO ARRAY DI MUTEX
     for (i=0;i<NF;i++) {
-        forchette[i] = 2;
+        if ((err = pthread_mutex_init(&(mtx[i]),NULL)) != 0) {
+            errno = err;
+            perror("Main : Initialize Mutex\n");
+        }
     }
 
     pthread_t * array_thread = malloc (NF*sizeof(pthread_t));
     for (i=0;i<NF;i++) {
         pthread_t t;
-        array_thread[i] = t;
         if ((err = pthread_create(&t,NULL,&filosofo,(void*)&i)) != 0) {
             errno = err;
             perror("Main : Create Thread\n");
         }
+        array_thread[i] = t;
         printf("Creato Thread %d\n",i);
     }
     
@@ -98,30 +96,30 @@ void * filosofo (void * arg) {
     return (void*)0;
 }
 
-void prendiForchette (int i) {
-    pthread_mutex_lock (&mtx);
+void prendiForchette (int id) {
+    //TODO : GESTISCI ERRORI
+    if (id%2 == 0) {
 
-    while (forchette[i]!=2) {
-        pthread_cond_wait (&cond,&mtx);
+        //PRENDI PRIMA A SINISTRA
+        pthread_mutex_lock(&mtx[sinistra(id)]);
+        //CERCA DI PRENDERE A DESTRA 
+        pthread_mutex_lock(&mtx[destra(id)]);
+
+    } else {
+
+        //PRENDI PRIMA A DESTRA 
+        pthread_mutex_lock(&mtx[destra(id)]);
+        //CERCA DI PRENDERE A SINISTRA 
+        pthread_mutex_lock(&mtx[sinistra(id)]);
+
     }
 
-    forchette[sinistra(i)]--;
-    forchette[destra(i)]--;
-
-    pthread_mutex_unlock (&mtx);
 }
 
-void rilasciaForchette (int i) {
-    pthread_mutex_lock (&mtx);
-
-    forchette[sinistra(i)]++;
-    forchette[destra(i)]++;
-    
-    if (forchette[sinistra(i)]==2 || forchette[destra(i)]==2) {
-        pthread_cond_signal (&cond);
-    }
-
-    pthread_mutex_unlock (&mtx);
+void rilasciaForchette (int id) {
+    //TODO : GESTISCI ERRORI
+    pthread_mutex_unlock(&mtx[sinistra(id)]);
+    pthread_mutex_unlock(&mtx[destra(id)]);
 }
 
 int destra (int i) {
@@ -136,4 +134,3 @@ int sinistra (int i) {
     ret = (i+1) % NF;
     return ret;
 }
-
