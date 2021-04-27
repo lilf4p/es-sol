@@ -104,13 +104,13 @@ int prendiForchette (int id) {
         //PRENDI PRIMA A SINISTRA
         if ((err = pthread_mutex_lock(&mtx[sinistra(id)])) != 0) {
             errno = err;
-            perror ("PrendiForchette : Lock1");
+            perror ("Prendi Forchette : Lock1");
             return -1;
         }
         //CERCA DI PRENDERE A DESTRA 
         if ((err = pthread_mutex_lock(&mtx[destra(id)])) != 0) {
             errno = err;
-            perror ("PrendiForchette : Lock2");
+            perror ("Prendi Forchette : Lock2");
             return -1;
         }
 
@@ -119,13 +119,13 @@ int prendiForchette (int id) {
         //PRENDI PRIMA A DESTRA 
         if ((err = pthread_mutex_lock(&mtx[destra(id)])) != 0) {
             errno = err;
-            perror ("PrendiForchette : Lock1");
+            perror ("Rilascia Forchette : Lock1");
             return -1;
         }
         //CERCA DI PRENDERE A SINISTRA 
         if ((err = pthread_mutex_lock(&mtx[sinistra(id)])) != 0) {
             errno = err;
-            perror ("PrendiForchette : Lock2");
+            perror ("Rilascia Forchette : Lock2");
             return -1;
         }
 
