@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include "icl_hash.h"
 
 #define data_size 128
 //#define buf_size 10
@@ -22,24 +23,18 @@ node * buffer_parole = NULL;
 //LOCK E CV
 pthread_mutex_t mtx1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mtx2 = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER;
-pthread_cond_t cond2 = PTHREAD_COND_INITIALIZER;
-//pthread_cond_t notfull1 = PTHREAD_COND_INITIALIZER;
-//pthread_cond_t notfull2 = PTHREAD_COND_INITIALIZER;
-
-//int empty1 = 1;
-//int full1 = 0;
-//int empty2 = 1;
-//int full2 = 0;
+pthread_cond_t notEmpty1 = PTHREAD_COND_INITIALIZER;
+pthread_cond_t notEmpty2 = PTHREAD_COND_INITIALIZER;
 
 void * reader (void * arg);
 void * tokenizer (void * arg);
 void * printer (void * arg);
-int insertLast1 (char * data); //return -1 in caso di errore
-int insertLast2 (char * data);// idem 
+void * printer_hash (void * arg);
+int insertBuf1 (char * data); //return -1 in caso di errore
+int insertBuf2 (char * data);// idem 
 int sizeList (node * list); 
 void printList (node * list);
-void insert (node ** list, char * data);
+void insertNode (node ** list, char * data);
 char * removeNode (node ** list);
 
 int main (int argc, char * argv []) {
@@ -77,16 +72,16 @@ void * reader (void * arg) {
     while (fgets(line,data_size,f) != NULL) {
         //printf("READER : %s\n",line);
         //fflush (stdout);
-        while (insertLast1 (line) == -1) {
-            //se restituisce errore riprova!
+        if (insertBuf1 (line) == -1) {
+            exit(EXIT_FAILURE);
         }
-        //struct timespec t1;
-        //t1.tv_nsec = 9999999;
-        //t1.tv_sec = 0;
-        //nanosleep(&t1,NULL);
-        sleep(1);
+        struct timespec t1;
+        t1.tv_nsec = 9999999;
+        t1.tv_sec = 0;
+        nanosleep(&t1,NULL);
+       
     }
-    insertLast1 ("-1");
+    insertBuf1 ("-1");
     return (void*)0;
 }
 
@@ -109,7 +104,7 @@ void * tokenizer (void * arg) {
         while (buffer_righe == NULL) {
             //printf ("TOKENIZER VA IN WAIT\n");
             //fflush(stdout);
-            if ((err = pthread_cond_wait (&cond1,&mtx1)) != 0) {
+            if ((err = pthread_cond_wait (&notEmpty1,&mtx1)) != 0) {
                 errno = err;
                 perror("Tokenizer : wait1");
             }
@@ -142,15 +137,15 @@ void * tokenizer (void * arg) {
         while (token) {
             //printf ("TOKENIZER : Token = %s\n",token);
             //fflush(stdout);
-            while (insertLast2(token) == -1) {
-                printf("ERRORE INSERT BUFFER 2\n");
+            if (insertBuf2(token) == -1) {
+                exit(EXIT_FAILURE);
             }
             token = strtok(NULL," ");
         }
     
         
     }
-    insertLast2 ("-1");
+    insertBuf2 ("-1");
     return (void*)0;
 }
 
@@ -165,7 +160,7 @@ void * printer (void * arg) {
             continue;
         }
         while (buffer_parole == NULL) {
-            if ((err = pthread_cond_wait (&cond2,&mtx2))!= 0) {
+            if ((err = pthread_cond_wait (&notEmpty2,&mtx2))!= 0) {
                 errno = err;
                 perror("Printer : wait2");
                 continue;
@@ -198,7 +193,7 @@ void * printer (void * arg) {
 }
 
 //inserisce una riga in fondo al buffer buffer_righe
-int insertLast1 (char * data) {
+int insertBuf1 (char * data) {
     
     int err;
     if ((err = pthread_mutex_lock (&mtx1))!=0) {
@@ -221,17 +216,15 @@ int insertLast1 (char * data) {
     */
 
     //INSERISCI IN TESTA
-    insert(&buffer_righe,data);
-
-    //printList (buffer_righe);
-    //empty1 = 0;
-    pthread_cond_signal (&cond1);
+    insertNode(&buffer_righe,data);
+    //MANDO SEGNALE SOLO SE DA VUOTA PASSA A NON VUOTA
+    pthread_cond_signal (&notEmpty1);
     pthread_mutex_unlock (&mtx1);
     return 0;
 }
 
 //inserisce una parola in fondo al buffer buffer_parole
-int insertLast2 (char * data) {
+int insertBuf2 (char * data) {
     
     int err;
     if ((err = pthread_mutex_lock (&mtx2))!=0) {
@@ -257,9 +250,9 @@ int insertLast2 (char * data) {
     }
     */
     //INSERISCI IN TESTA
-    insert(&buffer_parole,data);
-    //empty2 = 0;
-    pthread_cond_signal (&cond2);
+    insertNode(&buffer_parole,data);
+    //MANDO SEGNALE SOLO SE NON PIU' VUOTA
+    pthread_cond_signal (&notEmpty2);
     pthread_mutex_unlock (&mtx2);
     return 0;
 } 
@@ -280,7 +273,7 @@ void printList (node * list) {
     printf ("\n");
 }
 
-void insert (node ** list, char * data) {
+void insertNode (node ** list, char * data) {
     node * new = malloc (sizeof(node));
     new->data = malloc(data_size*sizeof(char));
     new->data = data;
@@ -309,4 +302,62 @@ char * removeNode (node ** list) {
         free(curr);
     }
     return line;
+}
+
+
+//TODO : CHIEDI BUG USANDO LA TABELLA HASH
+void * printer_hash (void * arg) {
+    
+    icl_hash_t * ht = NULL;
+    ht = icl_hash_create(500,NULL,NULL);
+    char stampa = 0;
+    while (1) {
+        int err;
+        if ((err = pthread_mutex_lock (&mtx2))!=0) {
+            errno = err;
+            perror("Printer : lock2");
+            continue;
+        }
+        while (buffer_parole == NULL) {
+            if ((err = pthread_cond_wait (&notEmpty2,&mtx2))!= 0) {
+                errno = err;
+                perror("Printer : wait2");
+                continue;
+            }
+        }
+        //prendo l'ultimo
+        char * word = malloc(data_size*sizeof(char));
+        word = removeNode(&buffer_parole);
+        //if (buffer_parole==NULL) empty2 = 1;
+        pthread_mutex_unlock(&mtx2);
+        //printf("Buffer 2 : prelevato dato\n");
+        //fflush(stdout);
+
+        if (strcmp(word,"-1") == 0) break;
+
+        //INSERISCI OCCORRENZA IN TABELLA HASH 
+        
+        if (!icl_hash_find(ht,word)) {
+            icl_hash_insert(ht, word, (void*)word);
+            stampa = 1;
+        } else {
+            free(word);
+        }
+        
+    }
+    //STAMPA LE OCCORRENZE
+    int k;
+    icl_entry_t *entry;
+    char *key, *value;
+
+    if (ht && stampa) {
+	    printf("Le parole individuate sono:\n");
+	    printf("-----------------------------------------------\n");
+	    icl_hash_foreach(ht, k, entry, key, value)
+	    printf("%s ", value);
+	    printf("\n-----------------------------------------------\n");
+	    icl_hash_destroy(ht, NULL, free);
+    }   
+
+    return (void*)0;
 }

@@ -111,6 +111,7 @@ int prendiForchette (int id) {
         if ((err = pthread_mutex_lock(&mtx[destra(id)])) != 0) {
             errno = err;
             perror ("Prendi Forchette : Lock2");
+            pthread_mutex_unlock(&mtx[sinistra(id)]);
             return -1;
         }
 
@@ -126,6 +127,7 @@ int prendiForchette (int id) {
         if ((err = pthread_mutex_lock(&mtx[sinistra(id)])) != 0) {
             errno = err;
             perror ("Rilascia Forchette : Lock2");
+            pthread_mutex_unlock(&mtx[destra(id)]);
             return -1;
         }
 
