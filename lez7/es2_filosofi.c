@@ -78,7 +78,7 @@ void * filosofo (void * arg) {
         nanosleep(&t1,NULL);
 
         //PRENDI FORCHETTE
-        if (prendiForchette(id)==-1) continue;
+        if (prendiForchette(id)==-1) continue; //OPPURW WHILE DOPO UN TOT DI VOLTE LO FACCIO TERMINARE, O TERMINO SUBITO 
 
         //MANGIA
         printf ("Filosofo %d : Mangia v%d...\n",id,i);

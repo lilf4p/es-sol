@@ -73,7 +73,7 @@ void * reader (void * arg) {
         //printf("READER : %s\n",line);
         //fflush (stdout);
         if (insertBuf1 (line) == -1) {
-            exit(EXIT_FAILURE);
+            exit(EXIT_FAILURE); //OPPURE GLI CONCEDO UN TOT DI TENTATIVI PRIMA DI TERMINARLO 
         }
         struct timespec t1;
         t1.tv_nsec = 9999999;
