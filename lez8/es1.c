@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <pthread.h>
+#include <string.h>
 
 #define NUM_PROD 2
 #define NUM_CONS 3
@@ -24,10 +25,12 @@ node * coda = NULL; //RISORSA CONDIVISA -- CODA FIFO
 pthread_mutex_t lock_coda = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t not_empty = PTHREAD_COND_INITIALIZER;
 
+
 void * produttore (void * arg);
 void * consumatore (void * arg);
 void insertNode (node ** list, char * data);
 char * removeNode (node ** list);
+int sizeList (node * list);
 
 int main (int argc, char * argv[]) {
 
@@ -49,25 +52,38 @@ int main (int argc, char * argv[]) {
     pthread_t * array_thread = malloc ((N+M)*sizeof(pthread_t));
     int i;
     int err;
+    for (i=M;i<(M+N);i++) {
+        pthread_t t;
+        PTHREADCALL(err,pthread_create(&t,NULL,&consumatore,NULL),"Create");
+        array_thread[i] = t;
+    }
+    //printf ("Consumatori creati...\n");
+    //fflush(stdout);
+
     for (i=0;i<M;i++) {
         pthread_t t;
         PTHREADCALL(err,pthread_create(&t,NULL,&produttore,(void*)&iter),"Create");
         array_thread[i] = t;
     }
-    printf ("Produttori creati...\n");
-    fflush(stdout);
-    for (i=0;i<N;i++) {
-        pthread_t t;
-        PTHREADCALL(err,pthread_create(&t,NULL,&consumatore,NULL),"Create");
-        array_thread[i] = t;
-    }
-    printf ("Consumatori creati...\n");
-    fflush(stdout);
+    //printf ("Produttori creati...\n");
+    //fflush(stdout);
 
-    for (i=0;i<(N+M);i++) {
+    //ASPETTO TERMINAZIONE THREAD PRODUTTORI
+    for (i=0;i<M;i++) {
         PTHREADCALL(err,pthread_join(array_thread[i],NULL),"Join");
     }
 
+    //AGGIUNGO N MESSAGGI
+    for (i=0;i<N;i++) {
+        insertNode(&coda,"-1");
+    }
+
+    //ASPETTO CONSUMATORI
+    for (i=M;i<(M+N);i++) {
+        PTHREADCALL(err,pthread_join(array_thread[i],NULL),"Join");
+    }
+
+    free(coda);
     printf ("Fine...\n");
     return 0;
 }
@@ -75,41 +91,46 @@ int main (int argc, char * argv[]) {
 //INSERISCE K/M MESSAGGI NELLA CODA
 void * produttore (void * arg) {
     int iter = *((int*)arg);
-    int err;
     int i;
     for (i=0;i<iter;i++) {
-        //PRENDO LOCK
-        PTHREADCALL(err,pthread_mutex_lock(&lock_coda),"Lock");
         //AGGIUNGO MESSAGGIO
-        char * msg = malloc(sizeof(data_size));
-        sprintf(msg,"Produttore %d : %d\n",pthread_self(),i);
+        char * msg = malloc(data_size*sizeof(char));
+        sprintf(msg,"Produttore %ld : %d",pthread_self(),i);
         insertNode(&coda,msg);
-        //INVIO SIGNAL
-        PTHREADCALL(err,pthread_cond_signal(&not_empty),"Signal");
-        //RILASCIO LOCK
-        pthread_mutex_unlock(&lock_coda);
+        sleep(1);
     }
-
+        
+    return (void*)0;
 }
 
 void * consumatore (void * arg) {
     //CICLO INFINITO
-
-    //PRENDO LOCK
-
-    //ASPETTO CONDIZIONE VERIFICATA 
-
+    int fine = 0;
+    while (1) {
     //LEGGO MESSAGGIO
-
-    //SE FINE TERMINO 
-    //ALTRIMENTI STAMPO 
-
-    //RILASCIO LOCK 
+        char * msg = malloc(data_size*sizeof(char));
+        msg = removeNode(&coda);
+    //SE TUTTI PRODUTTORI TERMINATI --> ESCO 
+        if ((strcmp(msg,"-1") == 0)) {
+            fine = 1;
+            printf("LETTO -1\n");
+            fflush(stdout); 
+        }else{
+        //STAMPO
+            printf("%s\n",msg);
+            fflush(stdout);
+        } 
+        if (fine) break;
+    }
+    return (void*)0;
 }
 
 
 //INSERIMENTO IN TESTA
 void insertNode (node ** list, char * data) {
+    int err;
+    //PRENDO LOCK
+    PTHREADCALL(err,pthread_mutex_lock(&lock_coda),"Lock");
     node * new = malloc (sizeof(node));
     new->data = malloc(data_size*sizeof(char));
     new->data = data;
@@ -117,10 +138,23 @@ void insertNode (node ** list, char * data) {
 
     //INSERISCI IN TESTA
     *list = new;
+    //INVIO SIGNAL
+    PTHREADCALL(err,pthread_cond_signal(&not_empty),"Signal");
+    //RILASCIO LOCK
+    pthread_mutex_unlock(&lock_coda);
 }
 
 //RIMOZIONE IN CODA 
 char * removeNode (node ** list) {
+    int err;
+    //PRENDO LOCK
+    PTHREADCALL(err,pthread_mutex_lock(&lock_coda),"Lock");
+    //ASPETTO CONDIZIONE VERIFICATA 
+    while (coda==NULL) {
+        pthread_cond_wait(&not_empty,&lock_coda);
+        printf("Consumatore Svegliato\n");
+        fflush(stdout);
+    }
     char * line = malloc(data_size*sizeof(char));
     node * curr = *list;
     node * prev = NULL;
@@ -129,8 +163,6 @@ char * removeNode (node ** list) {
         curr = curr->next;
     }
     line = curr->data;
-    //printf("TOKENIZER : %s\n",line);
-    //fflush(stdout);
     //LO RIMUOVO
     if (prev == NULL) {
         *list = NULL;
@@ -138,5 +170,15 @@ char * removeNode (node ** list) {
         prev->next = NULL;
         free(curr);
     }
+    //RILASCIO LOCK
+    pthread_mutex_unlock(&lock_coda);
     return line;
+}
+
+int sizeList (node * list) {
+    int size = 0;
+    while (list!=NULL) {
+        size++;
+    }
+    return size;
 }
