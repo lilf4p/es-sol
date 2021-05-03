@@ -3,20 +3,37 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
+#include <sys/wait.h>
 
 #define size_op 128
+
+// utility macro
+#define SYSCALL(c,e) \
+    if(c==-1) { perror(e);exit(errno); }
 
 int main (int argc, char * argv[]) {
 
     while (1) {
         
-        char * op[size_op];
-        char * result[size_op];
-        getline(&op,size_op,stdin);
-
-        if (strcmp(op,"quit") == 0) break;
-        if (strcmp(op,"exit") == 0) break;
-
+        char op[size_op];
+        char result[size_op];
+        printf ("> ");
+        memset(op, '\0', size_op);
+        if (fgets(op,size_op,stdin) == NULL) {
+            perror("fgets");
+            exit(EXIT_FAILURE);
+        }
+        
+        if (strncmp(op,"quit",4) == 0) {
+            printf("Sto uscendo...\n");
+            break;
+        }
+        if (strncmp(op,"exit",4) == 0) {
+            printf("Sto uscendo...\n");
+            break;
+        }
+        
         //CREAZIONE PIPE
         int ipfd[2];
         if (pipe(ipfd) == -1) {
@@ -28,7 +45,7 @@ int main (int argc, char * argv[]) {
             perror("Pipe out");
             exit(EXIT_FAILURE);
         }
-
+        
         //FORKO ED ESEGUO IL COMANDO BC
         pid_t pid;
         switch(pid = fork()) {
@@ -42,7 +59,6 @@ int main (int argc, char * argv[]) {
                 if (dup2(ipfd[0],0) == -1) {
                     perror("dup2");
                     exit(EXIT_FAILURE);
-                
                 }
                 if (dup2(opfd[1],1) == -1) {
                     perror("dup2");
@@ -52,24 +68,21 @@ int main (int argc, char * argv[]) {
                     perror("dup2");
                     exit(EXIT_FAILURE);
                 }    
-                execlp("usr/bin/bc","usr/bin/bc","-lq",(char*)NULL);
+                execl("/usr/bin/bc","bc","-lq",NULL);
                 perror("Figlio : Exec");
                 return -1;
-            }
-            default : { //PADRE --> SCRIVE IN INPUT DELLA PIPE E LEGGE IL RISULTATO
-                //todo : gestisci errori
-                close(ipfd[0]);
-                close(opfd[1]);
-                write(ipfd[1], (char*)op,strlen(op));
-                read(opfd[0], result, size_op);
-                close(ipfd[1]); //CHIUDO STANDARD INPUT DI BC PER FARLO TERMINARE
-                wait(NULL);
-                return 1;
-            }            
+            }         
         }
+        SYSCALL(close(ipfd[0]),"close");
+        SYSCALL(close(opfd[1]),"close");
+        SYSCALL(write(ipfd[1], (char*)op,strlen(op)),"write");
+        SYSCALL(read(opfd[0], result, size_op),"read");
+        SYSCALL(close(ipfd[1]),"close"); //CHIUDO STANDARD INPUT DI BC PER FARLO TERMINARE
+        SYSCALL(wait(NULL),"wait");
+        
         fprintf(stdout, "Operazione: %s", op);
 	    fprintf(stdout, "Risultato : %s\n", result);
-
+        
     }
 
     return 0;
