@@ -33,6 +33,7 @@ int main (void) {
         if (errno == ENOENT) {
             sleep(1);
         }else{
+            perror("Connect");
             exit(EXIT_FAILURE);
         }
     }
