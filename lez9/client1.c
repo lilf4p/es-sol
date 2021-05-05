@@ -48,12 +48,12 @@ int main (void) {
             exit(EXIT_FAILURE);
         }
 
-        SYSCALL(write(sc,op,sizeof(op)),"write");
-        
         if (strncmp(op,"quit",4) == 0) {
             printf("Sto uscendo...\n");
             break;
         }
+
+        SYSCALL(write(sc,op,sizeof(op)),"write");
 
         SYSCALL(read(sc,response,N),"read");
         printf("From Server : %s\n",response);
