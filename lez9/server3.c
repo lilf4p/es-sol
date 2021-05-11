@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <ctype.h>
+#include <assert.h>
 
 #define UNIX_PATH_MAX 108 /* man 7 unix */ 
 #define SOCKNAME "/tmp/mysock"
@@ -19,6 +20,7 @@
     if(c==-1) { perror(e);exit(EXIT_FAILURE); }
 
 void capitalizer (char * str);
+int updatemax(fd_set set, int fdmax);
 
 int main (void) {
 
@@ -69,7 +71,7 @@ int main (void) {
                     if (strncmp(buf,"quit",4) == 0) {
                         printf("Closing connection with client...\n");
                         FD_CLR(fd,&set);
-                        //num_fd = aggiorna(&set);
+                        if (fd == num_fd) num_fd = updatemax(set,num_fd);
                         close(fd);
                     }else{
                         //TRASFORMA STRINGA TUTTA MAIUSCOLE
@@ -93,4 +95,12 @@ void capitalizer (char * str) {
         str[i] = toupper(ch);
         i++;
     }
+}
+
+// ritorno l'indice massimo tra i descrittori attivi
+int updatemax(fd_set set, int fdmax) {
+    for(int i=(fdmax-1);i>=0;--i)
+	if (FD_ISSET(i, &set)) return i;
+    assert(1==0);
+    return -1;
 }
