@@ -71,6 +71,7 @@ int main (void) {
         //if (term) break; //ANCHE SE GESTORE SETTA IL FLAG NON ESCE DAL WHILE, INCONTRA ACCEPT CHE DA ERRORE (SC INTERRUPT)
         int cfd;
         printf("Listen for clients...\n");
+        //COMPORTAMENTO CORRETTO -- MAIN BLOCCATO SU ACCEPT VIENE INTERROTTA LA SC E GESTISCO LA TERMINAZIONE 
         if ((cfd = accept(sfd,NULL,0)) == -1) {
            if (term==1) break;
            else {
