@@ -56,11 +56,14 @@ int main (int argc, char * argv []) {
     memset(&s,0,sizeof(s));
     s.sa_handler = gestore_term;
 
-    //installo gestore per segnali terminazione
     SYSCALL(sigaction(SIGINT,&s,NULL),"sigaction");
     SYSCALL(sigaction(SIGQUIT,&s,NULL),"sigaction");
     SYSCALL(sigaction(SIGTERM,&s,NULL),"sigaction");
     SYSCALL(sigaction(SIGHUP,&s,NULL),"sigaction");
+
+    //ignoro SIGPIPE
+    s.sa_handler = SIG_IGN;
+    SYSCALL(sigaction(SIGPIPE,&s,NULL),"sigaction");
 
     SYSCALL(sigemptyset(&sigset),"sigemptyset");
     SYSCALL(pthread_sigmask(SIG_SETMASK,&sigset,NULL),"pthread_sigmask");
@@ -97,6 +100,7 @@ int main (int argc, char * argv []) {
         perror("Socket");
         exit(EXIT_FAILURE);
     }
+    unlink(SOCKNAME);
     SYSCALL(bind(sfd,(struct sockaddr *)&sa,sizeof(sa)),"Bind");
     SYSCALL(listen(sfd,SOMAXCONN),"Listen");
 
@@ -112,7 +116,13 @@ int main (int argc, char * argv []) {
     printf("Listen for clients...\n");
     while (1) {
         rdset = set;
-        SYSCALL(select(num_fd+1,&rdset,NULL,NULL,NULL),"select");
+        if (select(num_fd+1,&rdset,NULL,NULL,NULL) == -1) {
+            if (term==1) break;
+            else {
+                perror("accept");
+                exit(EXIT_FAILURE);
+            }
+        } 
         int cfd;
         for (fd=0;fd<= num_fd;fd++) {
             if (FD_ISSET(fd,&rdset)) {
@@ -131,14 +141,14 @@ int main (int argc, char * argv []) {
                     SYSCALL(write(cfd,"Welcome to lilf4p server!",26),"Write Socket");
 
                 } else if (fd == pip[0]) { //CLIENT DA REINSERIRE NEL SET
-                //BUG -- SELECT RESTITUISCE CONTINUAMENTE LA PIPE PRONTA IN LETTURA ANCHE SE NON CI HO SCRITTO NULLA!!!! 
+
                     int cfd1;
                     int len;
                     int flag;
                     if ((len = read(pip[0],&cfd1,sizeof(cfd1))) > 0) { //LEGGO UN INTERO == 4 BYTES
                         printf ("Master : client %d ritornato\n",cfd1);
                         SYSCALL(read(pip[0],&flag,sizeof(flag)),"Master : read pipe");
-                        if (flag == -1) {
+                        if (flag == -1) { //CLIENT TERMINATO LO RIMUOVO DAL SET DELLA SELECT
                             printf("Closing connection with client...\n");
                             FD_CLR(cfd1,&set);
                             if (cfd1 == num_fd) num_fd = updatemax(set,num_fd);
@@ -147,13 +157,16 @@ int main (int argc, char * argv []) {
                             FD_SET(cfd1,&set);
                             if (cfd1 > num_fd) num_fd = cfd1;
                         }
+                    }else if (len == -1){ 
+                        perror("Master : read pipe");
+                        exit(EXIT_FAILURE);
                     }
 
-                } else { //SOCKET CLIENT PRONTO X READ
+                } else { //SOCKET CLIENT PRONTO X READ 
                     printf("Master : Client pronto in read\n");
                     //QUINDI INSERISCO FD SOCKET CLIENT NELLA CODA
                     insertNode(&coda,fd);
-
+                    FD_CLR(fd,&set); //IL BUG ERA CAUSATO DALLA MANCANZA DI QUESTO --> NON RIMUOVEVO IL CLIENT DAL SET --> SELECT RIMANEVA IN ASCOLTO SUL CLIENT  
                 }
             }
         }
@@ -186,8 +199,8 @@ void * worker (void * arg) {
         
         //SERVO IL CLIENT
         int len;
-        int fine;
-        if ((len = read(cfd,request,N)) == 0) {
+        int fine; //FLAG COMUNICATO AL MASTER PER SAPERE QUANDO TERMINA IL CLIENT
+        if ((len = read(cfd,request,N)) == 0) {  
             fine = -1;
             SYSCALL(write(pfd,&cfd,sizeof(cfd)),"THREAD : pipe write");
             SYSCALL(write(pfd,&fine,sizeof(fine)),"THREAD : pipe write");
@@ -227,6 +240,8 @@ void capitalizer (char * str) {
 
 //INSERIMENTO IN TESTA
 void insertNode (node ** list, int data) {
+    //printf("Inserisco in coda\n");
+    //fflush(stdout);
     int err;
     //PRENDO LOCK
     SYSCALL_PTHREAD(err,pthread_mutex_lock(&lock_coda),"Lock");
@@ -250,8 +265,8 @@ int removeNode (node ** list) {
     //ASPETTO CONDIZIONE VERIFICATA 
     while (coda==NULL) {
         pthread_cond_wait(&not_empty,&lock_coda);
-        printf("Consumatore Svegliato\n");
-        fflush(stdout);
+        //printf("Consumatore Svegliato\n");
+        //fflush(stdout);
     }
     int data;
     node * curr = *list;
