@@ -140,8 +140,9 @@ int main (int argc, char * argv []) {
                     printf ("Connection accepted from client!\n");
                     SYSCALL(write(cfd,"Welcome to lilf4p server!",26),"Write Socket");
 
-                } else if (fd == pip[0]) { //CLIENT DA REINSERIRE NEL SET
-
+                } else if (fd == pip[0]) { //CLIENT DA REINSERIRE NEL SET -- PIPE PRONTA IN LETTURA
+                    //STAMPA DI TEST PER BUG PIPE
+                    //printf("Pipe pronta in lettura\n");
                     int cfd1;
                     int len;
                     int flag;
@@ -166,7 +167,7 @@ int main (int argc, char * argv []) {
                     printf("Master : Client pronto in read\n");
                     //QUINDI INSERISCO FD SOCKET CLIENT NELLA CODA
                     insertNode(&coda,fd);
-                    FD_CLR(fd,&set); //IL BUG ERA CAUSATO DALLA MANCANZA DI QUESTO --> NON RIMUOVEVO IL CLIENT DAL SET --> SELECT RIMANEVA IN ASCOLTO SUL CLIENT  
+                    FD_CLR(fd,&set); //BUG RISOLTO : ERA CAUSATO DALLA MANCANZA DI QUESTO --> NON RIMUOVEVO IL CLIENT DAL SET --> SELECT RIMANEVA IN ASCOLTO SUL CLIENT  
                 }
             }
         }
